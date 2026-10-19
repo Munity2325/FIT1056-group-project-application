@@ -1,0 +1,205 @@
+{
+    "users": [
+        {
+            "id": 1,
+            "username": "grace",
+            "password_hash": "41676f359a0e0ff04732eca4a3c3aa83b76c0c111c70a72b8177ea570e14de12",
+            "salt": "fa9bb2ecd6309ea7",
+            "role": "Administrator",
+            "active": true
+        },
+        {
+            "id": 2,
+            "username": "kristine",
+            "password_hash": "f0b80c154ce1398cbd3f4c416332f219d2039f6d97a564c2c6e9f8e070df519c",
+            "salt": "8c9f121fad40db31",
+            "role": "Staff",
+            "active": true
+        },
+        {
+            "id": 3,
+            "username": "weisheng",
+            "password_hash": "a292a01f0a869287ea371406f62a06d4e439efbf05cbc2710332cd51b5c58b91",
+            "salt": "983948db31701031",
+            "role": "Volunteer",
+            "active": true
+        }
+    ],
+    "donors": [
+        {
+            "id": 1,
+            "name": "Tan Grocery",
+            "contact": "03-1234 5678",
+            "contact_consent": true
+        }
+    ],
+    "batches": [
+        {
+            "id": 1,
+            "item_name": "Milk",
+            "quantity": 24,
+            "unit": "cartons",
+            "expiry_date": "2026-10-24",
+            "storage": "Chilled",
+            "dietary_attributes": [
+                "Vegetarian",
+                "Contains dairy"
+            ],
+            "shelf_location": "Fridge 1",
+            "received_date": "2026-10-19",
+            "donation_ref": "DON-0001",
+            "donor_id": 1
+        },
+        {
+            "id": 2,
+            "item_name": "Rice",
+            "quantity": 40,
+            "unit": "kg bags",
+            "expiry_date": "2027-05-07",
+            "storage": "Ambient",
+            "dietary_attributes": [
+                "Vegan"
+            ],
+            "shelf_location": "A1",
+            "received_date": "2026-10-19",
+            "donation_ref": "DON-0001",
+            "donor_id": 1
+        },
+        {
+            "id": 3,
+            "item_name": "Canned chickpeas",
+            "quantity": 30,
+            "unit": "tins",
+            "expiry_date": "2027-08-15",
+            "storage": "Ambient",
+            "dietary_attributes": [
+                "Vegan"
+            ],
+            "shelf_location": "A2",
+            "received_date": "2026-10-19",
+            "donation_ref": "DON-0001",
+            "donor_id": 1
+        },
+        {
+            "id": 4,
+            "item_name": "Chicken (halal)",
+            "quantity": 15,
+            "unit": "packs",
+            "expiry_date": "2026-11-08",
+            "storage": "Frozen",
+            "dietary_attributes": [
+                "Halal"
+            ],
+            "shelf_location": "Freezer 1",
+            "received_date": "2026-10-19",
+            "donation_ref": "DON-0002",
+            "donor_id": null
+        },
+        {
+            "id": 5,
+            "item_name": "Peanut butter",
+            "quantity": 12,
+            "unit": "jars",
+            "expiry_date": "2027-02-16",
+            "storage": "Ambient",
+            "dietary_attributes": [
+                "Vegan",
+                "Contains nuts"
+            ],
+            "shelf_location": "B1",
+            "received_date": "2026-10-19",
+            "donation_ref": "DON-0002",
+            "donor_id": null
+        },
+        {
+            "id": 6,
+            "item_name": "Bread",
+            "quantity": 20,
+            "unit": "loaves",
+            "expiry_date": "2026-10-22",
+            "storage": "Ambient",
+            "dietary_attributes": [
+                "Vegetarian",
+                "Contains gluten"
+            ],
+            "shelf_location": "B2",
+            "received_date": "2026-10-19",
+            "donation_ref": "DON-0002",
+            "donor_id": null
+        },
+        {
+            "id": 7,
+            "item_name": "Baby formula",
+            "quantity": 10,
+            "unit": "tins",
+            "expiry_date": "2027-03-18",
+            "storage": "Ambient",
+            "dietary_attributes": [
+                "Vegetarian",
+                "Contains dairy"
+            ],
+            "shelf_location": "C1",
+            "received_date": "2026-10-19",
+            "donation_ref": "DON-0002",
+            "donor_id": null
+        }
+    ],
+    "households": [
+        {
+            "id": 1,
+            "preferred_name": "Kavitha",
+            "contact_method": "SMS",
+            "contact_detail": "012-345 6789",
+            "adults": 2,
+            "children": 2,
+            "infants": 1,
+            "seniors": 1,
+            "preferred_pickup_times": [
+                "Monday afternoon",
+                "Friday afternoon"
+            ],
+            "safety_needs": [
+                "Vegetarian"
+            ],
+            "preferences": [],
+            "accessibility_needs": "",
+            "private_note": "",
+            "consent": {
+                "given": true,
+                "date": "2026-10-19",
+                "withdrawn_date": null
+            },
+            "last_service_date": "2026-10-19"
+        },
+        {
+            "id": 2,
+            "preferred_name": "Hassan",
+            "contact_method": "Phone call",
+            "contact_detail": "019-876 5432",
+            "adults": 1,
+            "children": 0,
+            "infants": 0,
+            "seniors": 1,
+            "preferred_pickup_times": [
+                "Friday morning"
+            ],
+            "safety_needs": [
+                "Halal"
+            ],
+            "preferences": [],
+            "accessibility_needs": "Uses a walking cane, son Faizal may collect",
+            "private_note": "",
+            "consent": {
+                "given": true,
+                "date": "2026-10-19",
+                "withdrawn_date": null
+            },
+            "last_service_date": "2026-10-19"
+        }
+    ],
+    "orders": [],
+    "tasks": [],
+    "audit_log": [],
+    "notifications": [],
+    "donation_counter": 2
+}
