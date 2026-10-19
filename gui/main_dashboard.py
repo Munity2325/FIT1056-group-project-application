@@ -2,14 +2,19 @@ import time
 import streamlit as st
 from app.manager import FoodShareManager
 from gui.home_page import show_home_page
+from gui.donation_pages import show_donation_page
+from gui.inventory_pages import show_inventory_page, show_stock_problem_page, show_audit_log_page
+from gui.household_pages import show_household_page
 
 TIMEOUT_SECONDS = 10 * 60   # sign out after 10 minutes of no activity (FR-02)
 
 # pages each role can open (FR-03), anything not listed is hidden
 PAGES = {
-    "Administrator": {"Home": show_home_page},
-    "Staff": {"Home": show_home_page},
-    "Volunteer": {"Home": show_home_page},
+    "Administrator": {"Home": show_home_page, "Inventory": show_inventory_page,
+                      "Audit Log": show_audit_log_page},
+    "Staff": {"Home": show_home_page, "Record Donation": show_donation_page,
+              "Inventory": show_inventory_page, "Client Households": show_household_page},
+    "Volunteer": {"Home": show_home_page, "Report Stock Problem": show_stock_problem_page},
 }
 
 
