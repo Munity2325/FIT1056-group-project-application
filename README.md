@@ -108,7 +108,12 @@ Admin
 
 ## Testing:
 
-python -m pytest runs 50 unit tests (positive, negative and boundary cases) for accounts, donations, inventory, households, orders, tasks and reports. Each test uses its own temporary data file, so the demo data is not changed.
+python -m pytest runs 68 tests:
+- 50 unit tests (positive, negative and boundary cases) for accounts, donations, inventory, households, orders, tasks and reports
+- 8 MC/DC tests for the login decision and the order item decision (tests/test_mcdc.py)
+- 10 functional end-to-end tests that click through the real Streamlit app as each role (tests/test_functional.py)
+
+Each test uses its own temporary data file, so the demo data is not changed.
 
 ## Changes from Deliverable 1 / Known Limitations:
 
