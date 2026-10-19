@@ -1,0 +1,44 @@
+sequenceDiagram
+    actor Staff as Food Bank Staff
+    participant UI as Food Allocation page<br/>(order_pages.py)
+    participant M as FoodShareManager
+    participant H as Household
+    participant B as DonationBatch
+    participant DB as foodshare.json
+
+    Staff->>UI: select household, click "Suggest food allocation"
+    UI->>M: suggest_allocation(household_id)
+    M->>M: find_household(household_id)
+    M->>H: size(), safety_needs, preferences
+    M->>M: available_batches() [earliest expiry first]
+    loop for each batch in stock
+        M->>B: read dietary_attributes
+        M->>M: safety_conflicts(batch, household)
+        M->>M: preference_conflicts(batch, household)
+        alt conflicts with a need or preference
+            M->>M: skip batch
+        else suitable
+            M->>M: free_quantity(batch)
+            M->>M: add item, quantity = min(household.size(), free)
+        end
+    end
+    M-->>UI: suggested items
+    Staff->>UI: edit quantities, choose pickup time, click "Create order"
+    UI->>M: create_order(household_id, items, pickup_time, user, collector, justifications)
+    alt pickup time not in household's preferred times
+        M-->>UI: (None, "Pickup time must be one of the household's preferred times.")
+    else valid pickup time
+        loop for each item
+            alt safety conflict (allergy, medical, religious)
+                M-->>UI: (None, "... cannot be added.") [no override, FR-16]
+            else preference conflict
+                opt no justification given
+                    M-->>UI: (None, "... Please give a reason.") [FR-17]
+                end
+            end
+        end
+        M->>M: Order(id, household_id, items, pickup_time, status="Requested")
+        M->>DB: _save_data()
+        M-->>UI: (order, "Order FS-0001 created.")
+        UI-->>Staff: success message
+    end
