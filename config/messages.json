@@ -1,0 +1,4 @@
+{
+    "pickup_confirmation": "Hello from Community Harvest Food Bank. Your order {order_ref} is ready for pickup on {pickup_time}.",
+    "substitution": "Hello from Community Harvest Food Bank. One item in your order {order_ref} has been replaced with a suitable alternative. Pickup is still on {pickup_time}."
+}
