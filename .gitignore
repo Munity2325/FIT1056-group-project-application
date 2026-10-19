@@ -1,0 +1,17 @@
+# python cache
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# virtual environment
+.venv/
+venv/
+
+# files the app creates while running
+*.log
+data/backups/
+test_data.json
+
+# system files
+.DS_Store
+Thumbs.db
