@@ -104,7 +104,10 @@ def _household_details(manager, user):
                     "preferred_name": name, "contact_method": method, "contact_detail": detail,
                     "adults": adults, "children": children, "infants": infants, "seniors": seniors,
                     "preferred_pickup_times": pickup, "private_note": note}, user)
-                (st.success if ok else st.error)(message)
+                if ok:
+                    st.success(message)
+                else:
+                    st.error(message)
 
     # consent can be given or taken back at any time (FR-14)
     with st.expander("Consent and dietary needs"):
@@ -117,7 +120,10 @@ def _household_details(manager, user):
             access = st.text_input("Accessibility needs", household.accessibility_needs)
             if st.form_submit_button("Client agrees - save needs"):
                 ok, message = manager.give_consent(household.id, safety, prefs, access, user)
-                (st.success if ok else st.error)(message)
+                if ok:
+                    st.success(message)
+                else:
+                    st.error(message)
         if household.consent.given and st.button("Client withdraws consent"):
             ok, message = manager.withdraw_consent(household.id, user)
             st.success(message)

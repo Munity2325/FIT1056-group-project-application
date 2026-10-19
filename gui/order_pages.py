@@ -105,7 +105,10 @@ def _orders(manager, user):
     for status in next_status:
         if st.button(f"Mark as {status}", key=f"{order.id}_{status}"):
             ok, message = manager.set_order_status(order.id, status, user)
-            (st.success if ok else st.error)(message)
+            if ok:
+                st.success(message)
+            else:
+                st.error(message)
             st.rerun()
 
 
@@ -126,7 +129,10 @@ def _substitution_form(manager, user, order):
             substitute = st.selectbox("Substitute", list(subs.keys()))
             if st.form_submit_button("Save substitution"):
                 ok, message = manager.record_substitution(order.id, originals[original], subs[substitute], user)
-                (st.success if ok else st.error)(message)
+                if ok:
+                    st.success(message)
+                else:
+                    st.error(message)
 
 
 def show_notification_page(manager, user):

@@ -313,7 +313,10 @@ class FoodShareManager:
         if d.get("contact_method") != "In person" and not str(d.get("contact_detail", "")).strip():
             return "Please enter a phone number or email for this contact method."
         try:
-            adults, children, infants, seniors = (int(d.get(k, 0)) for k in ("adults", "children", "infants", "seniors"))
+            adults = int(d.get("adults", 0))
+            children = int(d.get("children", 0))
+            infants = int(d.get("infants", 0))
+            seniors = int(d.get("seniors", 0))
         except (TypeError, ValueError):
             return "Household numbers must be whole numbers."
         if adults < 1:
@@ -535,12 +538,18 @@ class FoodShareManager:
         logging.info(f"Order {order.reference()} set to {status} by {user.username}.")
         return True, f"Order {order.reference()} is now {status}."
 
+    def _find_order_item(self, order, batch_id):
+        for item in order.items:
+            if item["batch_id"] == batch_id:
+                return item
+        return None
+
     def record_substitution(self, order_id, original_batch_id, substitute_batch_id, user):
         # swap an unavailable item for a suitable one and tell the client (FR-18, FR-29)
         order = self.find_order(order_id)
         if not order or order.status not in ("Requested", "Approved"):
             return False, "Substitutions can only be made before the order is packed."
-        original = next((i for i in order.items if i["batch_id"] == original_batch_id), None)
+        original = self._find_order_item(order, original_batch_id)
         substitute = self.find_batch(substitute_batch_id)
         household = self.find_household(order.household_id)
         if not original or not substitute:
@@ -554,7 +563,7 @@ class FoodShareManager:
         order.substitutions.append(Substitution(original["item_name"], substitute.item_name, substitute.id,
                                                 user.username, self._now(), original["quantity"]))
         # if the substitute is already in the order just add to that line
-        existing = next((i for i in order.items if i["batch_id"] == substitute.id), None)
+        existing = self._find_order_item(order, substitute.id)
         if existing:
             existing["quantity"] += original["quantity"]
             order.items.remove(original)
@@ -675,13 +684,16 @@ class FoodShareManager:
                 row = self._demand_row(rows, sub.original_item)
                 row["requested"] += sub.quantity
                 row["unavailable"] += sub.quantity
-                names = set(filter(None, row["substituted_with"].split(", "))) | {sub.substitute_item}
-                row["substituted_with"] = ", ".join(sorted(names))
+                if sub.substitute_item not in row["substituted_with"]:
+                    row["substituted_with"].append(sub.substitute_item)
+        # turn the list of substitutes into text for the table and csv
+        for row in rows.values():
+            row["substituted_with"] = ", ".join(row["substituted_with"])
         return sorted(rows.values(), key=lambda r: r["item"])
 
     def _demand_row(self, rows, name):
         return rows.setdefault(name, {"item": name, "requested": 0, "supplied": 0,
-                                      "unavailable": 0, "substituted_with": ""})
+                                      "unavailable": 0, "substituted_with": []})
 
     def _size_group(self, household):
         size = household.size()
