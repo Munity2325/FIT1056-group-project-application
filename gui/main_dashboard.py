@@ -5,16 +5,22 @@ from gui.home_page import show_home_page
 from gui.donation_pages import show_donation_page
 from gui.inventory_pages import show_inventory_page, show_stock_problem_page, show_audit_log_page
 from gui.household_pages import show_household_page
+from gui.order_pages import show_order_page, show_notification_page
+from gui.volunteer_pages import show_task_page
+from gui.report_pages import show_report_page
+from gui.admin_pages import show_user_page
 
 TIMEOUT_SECONDS = 10 * 60   # sign out after 10 minutes of no activity (FR-02)
 
 # pages each role can open (FR-03), anything not listed is hidden
 PAGES = {
-    "Administrator": {"Home": show_home_page, "Inventory": show_inventory_page,
-                      "Audit Log": show_audit_log_page},
-    "Staff": {"Home": show_home_page, "Record Donation": show_donation_page,
-              "Inventory": show_inventory_page, "Client Households": show_household_page},
-    "Volunteer": {"Home": show_home_page, "Report Stock Problem": show_stock_problem_page},
+    "Administrator": {"Home": show_home_page, "User Accounts": show_user_page, "Reports": show_report_page,
+                      "Inventory": show_inventory_page, "Audit Log": show_audit_log_page},
+    "Staff": {"Home": show_home_page, "Record Donation": show_donation_page, "Inventory": show_inventory_page,
+              "Client Households": show_household_page, "Food Allocation": show_order_page,
+              "Notification Log": show_notification_page, "Reports": show_report_page},
+    "Volunteer": {"Home": show_home_page, "My Tasks": show_task_page,
+                  "Report Stock Problem": show_stock_problem_page},
 }
 
 
@@ -45,13 +51,15 @@ def _login_screen(manager):
             st.error("The username or password is not right, or the account is disabled.")
 
 
+@st.cache_resource
+def get_manager():
+    # one shared manager for everyone, so the desktop and the tablet see the same data
+    return FoodShareManager()
+
+
 def launch():
     st.set_page_config(layout="wide", page_title="FoodShare Tracker")
-
-    # one manager for the whole session so data isnt reloaded on every click
-    if "manager" not in st.session_state:
-        st.session_state.manager = FoodShareManager()
-    manager = st.session_state.manager
+    manager = get_manager()
 
     user = manager.find_user_by_id(st.session_state.get("user_id"))
     if user and time.time() - st.session_state.get("last_active", 0) > TIMEOUT_SECONDS:

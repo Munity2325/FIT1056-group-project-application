@@ -454,6 +454,9 @@ class FoodShareManager:
                 continue
             if self.safety_conflicts(batch, household) or self.preference_conflicts(batch, household):
                 continue
+            # baby items only when there is an infant at home
+            if household.infants == 0 and batch.item_name.lower() in self.config["infant_items"]:
+                continue
             free = self.free_quantity(batch)
             if free <= 0:
                 continue

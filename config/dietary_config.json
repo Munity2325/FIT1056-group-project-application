@@ -70,5 +70,10 @@
         "Halal": "Halal order",
         "Vegetarian": "Vegetarian order",
         "Vegan": "Vegan order"
-    }
+    },
+    "infant_items": [
+        "baby formula",
+        "baby food",
+        "nappies"
+    ]
 }
