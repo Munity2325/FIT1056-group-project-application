@@ -7,7 +7,7 @@ import logging
 from app.user import User
 from app.donation import Donor, DonationBatch
 from app.household import Household
-from app.order import Order
+from app.order import Order, Substitution
 from app.task import Task
 from app.records import AuditLogEntry, NotificationRecord
 
@@ -403,3 +403,167 @@ class FoodShareManager:
         limit = today - datetime.timedelta(days=months * 30)
         return [h for h in self.households
                 if h.last_service_date and datetime.date.fromisoformat(h.last_service_date) < limit]
+
+    # dietary rules, read from config so new needs don't need code changes
+
+    def _breaks_need(self, batch, need):
+        rule = self.config["needs"].get(need, {})
+        attrs = batch.dietary_attributes
+        if any(a in attrs for a in rule.get("exclude_if_has", [])):
+            return True
+        if rule.get("require_one_of") and not any(a in attrs for a in rule["require_one_of"]):
+            return True
+        return False
+
+    def safety_conflicts(self, batch, household):
+        # allergies, medical and religious needs (FR-16)
+        return [n for n in household.safety_needs if self._breaks_need(batch, n)]
+
+    def preference_conflicts(self, batch, household):
+        # other preferences, staff can override these with a reason (FR-17)
+        return [n for n in household.preferences if self._breaks_need(batch, n)]
+
+    # food allocation and orders (F-05)
+
+    def find_order(self, order_id):
+        for order in self.orders:
+            if order.id == order_id:
+                return order
+        return None
+
+    def reserved_quantity(self, batch_id):
+        # stock already promised to orders that are not packed yet
+        total = 0
+        for order in self.orders:
+            if order.status in ("Requested", "Approved"):
+                total += sum(i["quantity"] for i in order.items if i["batch_id"] == batch_id)
+        return total
+
+    def free_quantity(self, batch):
+        return batch.quantity - self.reserved_quantity(batch.id)
+
+    def suggest_allocation(self, household_id, max_items=8, today=None):
+        # based only on household size, needs and stock, never on who "deserves" more (FR-15, NFR-10)
+        household = self.find_household(household_id)
+        if not household:
+            return []
+        suggestion, used_names = [], set()
+        for batch in self.available_batches(today):   # earliest expiry first
+            if batch.item_name.lower() in used_names:
+                continue
+            if self.safety_conflicts(batch, household) or self.preference_conflicts(batch, household):
+                continue
+            free = self.free_quantity(batch)
+            if free <= 0:
+                continue
+            suggestion.append({"batch_id": batch.id, "item_name": batch.item_name,
+                               "quantity": min(household.size(), free)})
+            used_names.add(batch.item_name.lower())
+            if len(suggestion) == max_items:
+                break
+        return suggestion
+
+    def create_order(self, household_id, items, pickup_time, user, alternative_collector="",
+                     justifications=None, today=None):
+        # justifications: {batch_id: reason} for items that go against a preference
+        household = self.find_household(household_id)
+        if not household:
+            return None, "Household not found."
+        allowed_slots = household.preferred_pickup_times or self.config["pickup_slots"]
+        if pickup_time not in allowed_slots:
+            return None, "Pickup time must be one of the household's preferred times."
+        if not items:
+            return None, "The order has no items."
+
+        justifications = justifications or {}
+        exceptions, clean_items = [], []
+        for item in items:
+            batch = self.find_batch(item["batch_id"])
+            qty = int(item["quantity"])
+            if not batch:
+                return None, "One of the items no longer exists."
+            if qty <= 0 or qty > self.free_quantity(batch):
+                return None, f"Only {self.free_quantity(batch)} {batch.unit} of {batch.item_name} are available."
+            # nobody can override a safety need, admins included (FR-16)
+            if self.safety_conflicts(batch, household):
+                return None, f"{batch.item_name} is not suitable for this household and cannot be added."
+            if self.preference_conflicts(batch, household):
+                reason = str(justifications.get(batch.id, "")).strip()
+                if not reason:
+                    return None, f"{batch.item_name} goes against a recorded preference. Please give a reason."
+                exceptions.append({"batch_id": batch.id, "item_name": batch.item_name,
+                                   "reason": reason, "by": user.username})
+            clean_items.append({"batch_id": batch.id, "item_name": batch.item_name, "quantity": qty})
+
+        order = Order(self._next_id(self.orders), household.id, clean_items, pickup_time,
+                      user.username, self._now(), alternative_collector=alternative_collector.strip(),
+                      exceptions=exceptions)
+        self.orders.append(order)
+        self._save_data()
+        logging.info(f"Order {order.reference()} created by {user.username}.")
+        return order, f"Order {order.reference()} created."
+
+    def approve_order(self, order_id, user):
+        order = self.find_order(order_id)
+        if not order or order.status != "Requested":
+            return False, "Only requested orders can be approved."
+        order.status = "Approved"
+        # approving makes a packing task for volunteers (F-06)
+        self.tasks.append(Task(self._next_id(self.tasks), "Pack order", "Store room", 10, order.id))
+        self._save_data()
+        logging.info(f"Order {order.reference()} approved by {user.username}.")
+        return True, f"Order {order.reference()} approved and sent to volunteers for packing."
+
+    def set_order_status(self, order_id, status, user):
+        order = self.find_order(order_id)
+        if not order:
+            return False, "Order not found."
+        allowed = {"Packed": ["Ready"], "Ready": ["Collected", "Not Collected"]}
+        if status not in allowed.get(order.status, []):
+            return False, f"An order that is {order.status} cannot be set to {status}."
+        order.status = status
+        if status == "Ready":
+            self._notify(order, "Pickup confirmation")
+        if status == "Collected":
+            household = self.find_household(order.household_id)
+            household.last_service_date = datetime.date.today().isoformat()
+        self._save_data()
+        logging.info(f"Order {order.reference()} set to {status} by {user.username}.")
+        return True, f"Order {order.reference()} is now {status}."
+
+    def record_substitution(self, order_id, original_batch_id, substitute_batch_id, user):
+        # swap an unavailable item for a suitable one and tell the client (FR-18, FR-29)
+        order = self.find_order(order_id)
+        if not order or order.status not in ("Requested", "Approved"):
+            return False, "Substitutions can only be made before the order is packed."
+        original = next((i for i in order.items if i["batch_id"] == original_batch_id), None)
+        substitute = self.find_batch(substitute_batch_id)
+        household = self.find_household(order.household_id)
+        if not original or not substitute:
+            return False, "Item not found."
+        if self.safety_conflicts(substitute, household) or self.preference_conflicts(substitute, household):
+            return False, f"{substitute.item_name} does not suit this household's dietary needs."
+        # the original item's reservation is released by the swap
+        if original["quantity"] > self.free_quantity(substitute):
+            return False, f"Not enough {substitute.item_name} in stock."
+
+        order.substitutions.append(Substitution(original["item_name"], substitute.item_name,
+                                                substitute.id, user.username, self._now()))
+        original["batch_id"] = substitute.id
+        original["item_name"] = substitute.item_name
+        self._notify(order, "Substitution")
+        self._save_data()
+        logging.info(f"Substitution on {order.reference()} by {user.username}.")
+        return True, f"{substitute.item_name} recorded as the substitute. The client has been notified."
+
+    # notifications (F-08), simulated by writing to a log
+
+    def _notify(self, order, kind):
+        household = self.find_household(order.household_id)
+        template = self.messages["substitution" if kind == "Substitution" else "pickup_confirmation"]
+        # message only has the order reference and pickup time, never diet or health info (FR-30)
+        message = template.format(order_ref=order.reference(), pickup_time=order.pickup_time)
+        record = NotificationRecord(order.reference(), household.contact_method, kind, message, self._now())
+        self.notifications.append(record)
+        logging.info(f"Notification ({kind}) for {order.reference()} via {household.contact_method}.")
+        return record
