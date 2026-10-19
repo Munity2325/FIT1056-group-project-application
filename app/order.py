@@ -1,11 +1,12 @@
 # a replacement item recorded when the original item ran out (FR-18)
 class Substitution:
-    def __init__(self, original_item, substitute_item, substitute_batch_id, recorded_by, timestamp):
+    def __init__(self, original_item, substitute_item, substitute_batch_id, recorded_by, timestamp, quantity=0):
         self.original_item = original_item
         self.substitute_item = substitute_item
         self.substitute_batch_id = substitute_batch_id
         self.recorded_by = recorded_by
         self.timestamp = timestamp
+        self.quantity = quantity
 
     def to_dict(self):
         return dict(self.__dict__)
@@ -13,7 +14,7 @@ class Substitution:
     @staticmethod
     def from_dict(d):
         return Substitution(d["original_item"], d["substitute_item"], d["substitute_batch_id"],
-                            d["recorded_by"], d["timestamp"])
+                            d["recorded_by"], d["timestamp"], d.get("quantity", 0))
 
 
 # a food allocation for one household and its pickup details (FR-19 to FR-21)

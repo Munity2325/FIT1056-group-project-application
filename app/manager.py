@@ -3,6 +3,7 @@ import hashlib
 import secrets
 import datetime
 import logging
+import csv
 
 from app.user import User
 from app.donation import Donor, DonationBatch
@@ -547,10 +548,16 @@ class FoodShareManager:
         if original["quantity"] > self.free_quantity(substitute):
             return False, f"Not enough {substitute.item_name} in stock."
 
-        order.substitutions.append(Substitution(original["item_name"], substitute.item_name,
-                                                substitute.id, user.username, self._now()))
-        original["batch_id"] = substitute.id
-        original["item_name"] = substitute.item_name
+        order.substitutions.append(Substitution(original["item_name"], substitute.item_name, substitute.id,
+                                                user.username, self._now(), original["quantity"]))
+        # if the substitute is already in the order just add to that line
+        existing = next((i for i in order.items if i["batch_id"] == substitute.id), None)
+        if existing:
+            existing["quantity"] += original["quantity"]
+            order.items.remove(original)
+        else:
+            original["batch_id"] = substitute.id
+            original["item_name"] = substitute.item_name
         self._notify(order, "Substitution")
         self._save_data()
         logging.info(f"Substitution on {order.reference()} by {user.username}.")
@@ -567,3 +574,147 @@ class FoodShareManager:
         self.notifications.append(record)
         logging.info(f"Notification ({kind}) for {order.reference()} via {household.contact_method}.")
         return record
+
+    # volunteer tasks (F-06)
+
+    def find_task(self, task_id):
+        for task in self.tasks:
+            if task.id == task_id:
+                return task
+        return None
+
+    def tasks_for(self, user):
+        # open tasks plus the ones this volunteer already has (FR-22)
+        return [t for t in self.tasks
+                if t.status == "Available"
+                or (t.status != "Completed" and t.history and t.history[-1]["user"] == user.username)]
+
+    def _move_task(self, task_id, user, from_status, to_status):
+        task = self.find_task(task_id)
+        if not task or task.status != from_status:
+            return None, f"This task is not {from_status.lower()}."
+        if from_status != "Available" and task.history[-1]["user"] != user.username:
+            return None, "This task belongs to another volunteer."
+        task.status = to_status
+        # who did what and when, for every step (FR-23)
+        task.history.append({"status": to_status, "user": user.username, "timestamp": self._now()})
+        return task, None
+
+    def claim_task(self, task_id, user):
+        task, problem = self._move_task(task_id, user, "Available", "Claimed")
+        if problem:
+            return False, problem
+        self._save_data()
+        return True, "Task claimed."
+
+    def start_task(self, task_id, user):
+        task, problem = self._move_task(task_id, user, "Claimed", "In progress")
+        if problem:
+            return False, problem
+        self._save_data()
+        return True, "Task started."
+
+    def complete_task(self, task_id, user):
+        task = self.find_task(task_id)
+        order = self.find_order(task.order_id) if task else None
+        # check stock first so a half-packed order never happens
+        if order:
+            for item in order.items:
+                batch = self.find_batch(item["batch_id"])
+                if not batch or batch.quantity < item["quantity"]:
+                    return False, f"Not enough {item['item_name']} left. Please tell a staff member."
+        task, problem = self._move_task(task_id, user, "In progress", "Completed")
+        if problem:
+            return False, problem
+        if order:
+            # packing takes the items out of stock automatically (FR-09)
+            for item in order.items:
+                self.find_batch(item["batch_id"]).quantity -= item["quantity"]
+            order.status = "Packed"
+        self._save_data()
+        logging.info(f"Task {task.id} completed by {user.username}.")
+        return True, "Task completed. Stock has been updated."
+
+    def picking_list(self, task_id):
+        # only what is needed to pack: no name, contact or household details (FR-24, NFR-06)
+        task = self.find_task(task_id)
+        order = self.find_order(task.order_id) if task else None
+        if not order:
+            return None
+        household = self.find_household(order.household_id)
+        notes = [self.config["packing_notes"][n] for n in household.safety_needs
+                 if n in self.config["packing_notes"]]
+        lines = []
+        for item in order.items:
+            batch = self.find_batch(item["batch_id"])
+            lines.append({"item": item["item_name"], "quantity": item["quantity"],
+                          "unit": batch.unit if batch else "", "shelf": batch.shelf_location if batch else ""})
+        return {"order_ref": order.reference(), "bag_number": order.id, "items": lines, "packing_notes": notes}
+
+    # reports (F-07), always grouped with no client names or contacts (FR-27)
+
+    def _orders_between(self, start, end):
+        return [o for o in self.orders if start.isoformat() <= o.created_at[:10] <= end.isoformat()]
+
+    def demand_report(self, start, end):
+        # requested vs supplied per item, plus items that had to be substituted (FR-25)
+        rows = {}
+        for order in self._orders_between(start, end):
+            supplied = order.status in ("Packed", "Ready", "Collected", "Not Collected")
+            for item in order.items:
+                row = self._demand_row(rows, item["item_name"])
+                row["requested"] += item["quantity"]
+                if supplied:
+                    row["supplied"] += item["quantity"]
+            # move substituted amounts back to the item that was really asked for
+            for sub in order.substitutions:
+                self._demand_row(rows, sub.substitute_item)["requested"] -= sub.quantity
+                row = self._demand_row(rows, sub.original_item)
+                row["requested"] += sub.quantity
+                row["unavailable"] += sub.quantity
+                names = set(filter(None, row["substituted_with"].split(", "))) | {sub.substitute_item}
+                row["substituted_with"] = ", ".join(sorted(names))
+        return sorted(rows.values(), key=lambda r: r["item"])
+
+    def _demand_row(self, rows, name):
+        return rows.setdefault(name, {"item": name, "requested": 0, "supplied": 0,
+                                      "unavailable": 0, "substituted_with": ""})
+
+    def _size_group(self, household):
+        size = household.size()
+        if size == 1:
+            return "1 person"
+        if size <= 3:
+            return "2-3 people"
+        if size <= 5:
+            return "4-5 people"
+        return "6+ people"
+
+    def fairness_report(self, start, end):
+        # how much food went to each household size and from each staff member (FR-26)
+        rows = {}
+        for order in self._orders_between(start, end):
+            household = self.find_household(order.household_id)
+            key = (self._size_group(household), order.created_by)
+            row = rows.setdefault(key, {"household_size": key[0], "allocated_by": key[1],
+                                        "orders": 0, "items": 0, "people": 0})
+            row["orders"] += 1
+            row["items"] += sum(i["quantity"] for i in order.items)
+            row["people"] += household.size()
+        result = []
+        for row in rows.values():
+            row["items_per_person"] = round(row["items"] / row["people"], 2) if row["people"] else 0
+            del row["people"]
+            result.append(row)
+        return sorted(result, key=lambda r: (r["household_size"], r["allocated_by"]))
+
+    def export_report(self, rows, out_path):
+        if not rows:
+            return False
+        # newline="" stops empty rows on windows
+        with open(out_path, "w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
+            writer.writeheader()
+            writer.writerows(rows)
+        logging.info(f"Report exported to {out_path}.")
+        return True

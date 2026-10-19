@@ -1,14 +1,74 @@
 {
-    "attributes": ["Vegetarian", "Vegan", "Halal", "Contains nuts", "Contains dairy", "Contains gluten", "None applicable"],
+    "attributes": [
+        "Vegetarian",
+        "Vegan",
+        "Halal",
+        "Contains nuts",
+        "Contains dairy",
+        "Contains gluten",
+        "None applicable"
+    ],
     "needs": {
-        "Nut allergy":        {"exclude_if_has": ["Contains nuts"]},
-        "Dairy allergy":      {"exclude_if_has": ["Contains dairy"]},
-        "Gluten intolerance": {"exclude_if_has": ["Contains gluten"]},
-        "Halal":              {"require_one_of": ["Halal", "Vegetarian", "Vegan"]},
-        "Vegetarian":         {"require_one_of": ["Vegetarian", "Vegan"]},
-        "Vegan":              {"require_one_of": ["Vegan"]}
+        "Nut allergy": {
+            "exclude_if_has": [
+                "Contains nuts"
+            ]
+        },
+        "Dairy allergy": {
+            "exclude_if_has": [
+                "Contains dairy"
+            ]
+        },
+        "Gluten intolerance": {
+            "exclude_if_has": [
+                "Contains gluten"
+            ]
+        },
+        "Halal": {
+            "require_one_of": [
+                "Halal",
+                "Vegetarian",
+                "Vegan"
+            ]
+        },
+        "Vegetarian": {
+            "require_one_of": [
+                "Vegetarian",
+                "Vegan"
+            ]
+        },
+        "Vegan": {
+            "require_one_of": [
+                "Vegan"
+            ]
+        }
     },
-    "reason_codes": ["Damaged", "Expired", "Spoiled", "Miscount", "Returned", "Other"],
-    "pickup_slots": ["Monday morning", "Monday afternoon", "Friday morning", "Friday afternoon"],
-    "contact_methods": ["SMS", "Phone call", "Email", "In person"]
+    "reason_codes": [
+        "Damaged",
+        "Expired",
+        "Spoiled",
+        "Miscount",
+        "Returned",
+        "Other"
+    ],
+    "pickup_slots": [
+        "Monday morning",
+        "Monday afternoon",
+        "Friday morning",
+        "Friday afternoon"
+    ],
+    "contact_methods": [
+        "SMS",
+        "Phone call",
+        "Email",
+        "In person"
+    ],
+    "packing_notes": {
+        "Nut allergy": "Nut-free order",
+        "Dairy allergy": "Dairy-free order",
+        "Gluten intolerance": "Gluten-free order",
+        "Halal": "Halal order",
+        "Vegetarian": "Vegetarian order",
+        "Vegan": "Vegan order"
+    }
 }
