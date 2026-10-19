@@ -1,0 +1,132 @@
+classDiagram
+direction TB
+class FoodShareManager {
+  -data_path: str
+  -config: dict
+  +users: list
+  +households: list
+  +batches: list
+  +orders: list
+  +tasks: list
+  +authenticate(username, password) User
+  +create_user(username, password, role) User
+  +can(user, action) bool
+  +record_donation(items, user, donor) dict
+  +adjust_stock(batch_id, quantity, reason_code, user) tuple
+  +register_household(d, user) tuple
+  +give_consent(household_id, safety_needs, preferences, accessibility_needs, user) tuple
+  +withdraw_consent(household_id, user) tuple
+  +suggest_allocation(household_id) list
+  +create_order(household_id, items, pickup_time, user) tuple
+  +approve_order(order_id, user) tuple
+  +record_substitution(order_id, original_batch_id, substitute_batch_id, user) tuple
+  +claim_task(task_id, user) tuple
+  +complete_task(task_id, user) tuple
+  +picking_list(task_id) dict
+  +fairness_report(start, end) list
+  +export_report(rows, out_path) bool
+}
+class User {
+  +id: int
+  +username: str
+  -password_hash: str
+  -salt: str
+  +role: str
+  +active: bool
+}
+class Donor {
+  +id: int
+  +name: str
+  +contact: str
+  +contact_consent: bool
+}
+class DonationBatch {
+  +id: int
+  +item_name: str
+  +quantity: int
+  +unit: str
+  +expiry_date: str
+  +storage: str
+  +dietary_attributes: list
+  +shelf_location: str
+  +donation_ref: str
+  +donor_id: int
+}
+class Household {
+  +id: int
+  +preferred_name: str
+  +contact_method: str
+  +contact_detail: str
+  +adults: int
+  +children: int
+  +infants: int
+  +seniors: int
+  +preferred_pickup_times: list
+  +safety_needs: list
+  +preferences: list
+  -private_note: str
+  +last_service_date: str
+  +size() int
+}
+class ConsentRecord {
+  +given: bool
+  +date: str
+  +withdrawn_date: str
+}
+class Order {
+  +id: int
+  +household_id: int
+  +items: list
+  +pickup_time: str
+  +status: str
+  +alternative_collector: str
+  +exceptions: list
+  +created_by: str
+  +reference() str
+}
+class Substitution {
+  +original_item: str
+  +substitute_item: str
+  +substitute_batch_id: int
+  +quantity: int
+  +recorded_by: str
+  +timestamp: str
+}
+class Task {
+  +id: int
+  +task_type: str
+  +location: str
+  +est_minutes: int
+  +order_id: int
+  +status: str
+  +history: list
+}
+class AuditLogEntry {
+  +user: str
+  +action: str
+  +details: str
+  +reason_code: str
+  +quantity: int
+  +timestamp: str
+}
+class NotificationRecord {
+  +order_ref: str
+  +method: str
+  +kind: str
+  +message: str
+  +timestamp: str
+}
+FoodShareManager "1" o-- "0..*" User : manages
+FoodShareManager "1" o-- "0..*" DonationBatch : manages
+FoodShareManager "1" o-- "0..*" Household : manages
+FoodShareManager "1" o-- "0..*" Order : manages
+FoodShareManager "1" o-- "0..*" Task : manages
+FoodShareManager "1" *-- "0..*" AuditLogEntry : writes
+FoodShareManager "1" *-- "0..*" NotificationRecord : writes
+Donor "0..1" -- "0..*" DonationBatch : donates
+Household "1" *-- "1" ConsentRecord : has
+Household "1" -- "0..*" Order : receives
+Order "0..*" -- "1..*" DonationBatch : allocates
+Order "1" *-- "0..*" Substitution : contains
+Order "1" -- "0..1" Task : packed by
+Order "1" -- "0..*" NotificationRecord : about
