@@ -20,6 +20,18 @@ PERMISSIONS = {
     "Volunteer": {"view_tasks", "adjust_stock", "view_inventory"},
 }
 
+# why we ask for each field, shown next to it on the form (FR-13)
+FIELD_HELP = {
+    "preferred_name": "So staff know what to call you. It does not need to be your full legal name.",
+    "contact_method": "So we can tell you when your food is ready, in the way that suits you.",
+    "household": "So the food allocation has enough for everyone at home.",
+    "infants": "So we can include formula or baby food in your food allocation.",
+    "seniors": "So we can include food that suits older adults.",
+    "pickup_times": "So your pickup fits around school, work or transport.",
+    "needs": "Only kept if you agree. Used so we never give you food you cannot eat.",
+    "accessibility": "Only kept if you agree. Helps us make pickup easier for you.",
+}
+
 
 class FoodShareManager:
     def __init__(self, data_path="data/foodshare.json", config_path="config/dietary_config.json",
@@ -283,3 +295,111 @@ class FoodShareManager:
         self._save_data()
         logging.info(f"Stock adjusted: batch {batch.id} -{quantity} ({reason_code}) by {user.username}.")
         return True, f"{batch.item_name} reduced by {quantity}. {batch.quantity} left."
+
+    # client households and consent (F-04)
+
+    def find_household(self, household_id):
+        for household in self.households:
+            if household.id == household_id:
+                return household
+        return None
+
+    def _check_household(self, d):
+        if not str(d.get("preferred_name", "")).strip():
+            return "Preferred name is required."
+        if d.get("contact_method") not in self.config["contact_methods"]:
+            return "Please choose a contact method."
+        if d.get("contact_method") != "In person" and not str(d.get("contact_detail", "")).strip():
+            return "Please enter a phone number or email for this contact method."
+        try:
+            adults, children, infants, seniors = (int(d.get(k, 0)) for k in ("adults", "children", "infants", "seniors"))
+        except (TypeError, ValueError):
+            return "Household numbers must be whole numbers."
+        if adults < 1:
+            return "A household needs at least 1 adult."
+        if min(children, infants, seniors) < 0:
+            return "Household numbers cannot be negative."
+        if seniors > adults:
+            return "Adults aged 65+ cannot be more than the number of adults."
+        if any(t not in self.config["pickup_slots"] for t in d.get("preferred_pickup_times", [])):
+            return "Please choose pickup times from the list."
+        return None
+
+    def register_household(self, d, user, today=None):
+        # only the minimum details, no income or ID numbers (FR-12, NFR-07)
+        problem = self._check_household(d)
+        if problem:
+            return None, problem
+
+        household = Household(self._next_id(self.households), d["preferred_name"].strip(),
+                              d["contact_method"], d.get("contact_detail", "").strip(),
+                              int(d["adults"]), int(d.get("children", 0)), int(d.get("infants", 0)),
+                              int(d.get("seniors", 0)), d.get("preferred_pickup_times", []),
+                              private_note=d.get("private_note", "").strip(),
+                              last_service_date=self._today(today).isoformat())
+        self.households.append(household)
+        self._save_data()
+        # sensitive needs only go in once consent is given
+        if d.get("consent"):
+            self.give_consent(household.id, d.get("safety_needs", []), d.get("preferences", []),
+                              d.get("accessibility_needs", ""), user, today)
+        logging.info(f"Household {household.id} registered by {user.username}.")
+        return household, f"Household registered with reference H-{household.id:04d}."
+
+    def update_household(self, household_id, d, user):
+        household = self.find_household(household_id)
+        if not household:
+            return False, "Household not found."
+        problem = self._check_household(d)
+        if problem:
+            return False, problem
+        household.preferred_name = d["preferred_name"].strip()
+        household.contact_method = d["contact_method"]
+        household.contact_detail = d.get("contact_detail", "").strip()
+        household.adults = int(d["adults"])
+        household.children = int(d.get("children", 0))
+        household.infants = int(d.get("infants", 0))
+        household.seniors = int(d.get("seniors", 0))
+        household.preferred_pickup_times = d.get("preferred_pickup_times", [])
+        household.private_note = d.get("private_note", "").strip()
+        self._save_data()
+        return True, "Household details updated."
+
+    def give_consent(self, household_id, safety_needs, preferences, accessibility_needs, user, today=None):
+        household = self.find_household(household_id)
+        if not household:
+            return False, "Household not found."
+        known = self.config["needs"]
+        if any(n not in known for n in list(safety_needs) + list(preferences)):
+            return False, "Please choose dietary needs from the list."
+        household.consent.given = True
+        household.consent.date = self._today(today).isoformat()
+        household.consent.withdrawn_date = None
+        household.safety_needs = list(safety_needs)
+        # a safety need already covers the same preference
+        household.preferences = [p for p in preferences if p not in safety_needs]
+        household.accessibility_needs = accessibility_needs.strip()
+        self._save_data()
+        logging.info(f"Consent recorded for household {household.id} by {user.username}.")
+        return True, "Consent and needs saved."
+
+    def withdraw_consent(self, household_id, user, today=None):
+        # withdrawn consent means the needs are deleted, not just hidden (FR-14)
+        household = self.find_household(household_id)
+        if not household:
+            return False, "Household not found."
+        household.consent.given = False
+        household.consent.withdrawn_date = self._today(today).isoformat()
+        household.safety_needs = []
+        household.preferences = []
+        household.accessibility_needs = ""
+        self._save_data()
+        logging.info(f"Consent withdrawn for household {household.id} by {user.username}.")
+        return True, "Consent withdrawn. Dietary and accessibility details were removed."
+
+    def inactive_households(self, months=24, today=None):
+        # records to review for deletion after 24 months without service (NFR-08)
+        today = self._today(today)
+        limit = today - datetime.timedelta(days=months * 30)
+        return [h for h in self.households
+                if h.last_service_date and datetime.date.fromisoformat(h.last_service_date) < limit]
